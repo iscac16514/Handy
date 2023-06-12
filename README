@@ -1,18 +1,17 @@
-Handy
-Handy é um aplicativo móvel desenvolvido no contexto da disciplina de Projeto e Desenvolvimento Informático, utilizando a tecnologia Flutter. O objetivo do aplicativo é apoiar o comércio e serviços locais, servindo como ponte entre consumidores e pequenos negócios locais de forma transparente e eficaz.
+Handy é uma aplicação móvel criada no contexto da unidade curricular de Projecto e Desenvolvimento Informático, usando a tecnologia Flutter. O propósito desta aplicação é apoiar o comércio e os serviços locais, agindo como uma ponte entre consumidores e pequenos negócios locais de forma clara e eficiente.
 
 Funcionalidades
-Algumas das características e funcionalidades da aplicação incluem:
-Autenticação de utilizador: A aplicação oferece um processo seguro e simples para registo e autenticação dos utilizadores.
-Mensagens: A aplicação proporciona um meio para os utilizadores comunicarem diretamente com os vendedores.
-Lista de favoritos: A aplicação permite que os utilizadores criem e mantenham a sua própria lista de produtos desejados.
-Carrinho de compras: A aplicação permite que os utilizadores adicionem produtos ao seu carrinho de compras e façam o checkout.
-Produtos: A aplicação disponibiliza um catálogo de produtos que os utilizadores podem visualizar e comprar.
-Categorias de produtos: A aplicação permite que os produtos estejam associados a categorias.
-Galeria de imagens do produto: A aplicação permite que os utilizadores visualizem várias imagens de um produto.
+Algumas das funcionalidades da aplicação incluem:
+Autenticação do utilizador: A aplicação disponibiliza um processo seguro e simples para registo e autenticação dos utilizadores.
+Mensagens: A aplicação permite a comunicação directa entre os utilizadores e os vendedores.
+Lista de favoritos: A aplicação permite aos utilizadores criar e gerir uma lista de produtos desejados.
+Carrinho de compras: A aplicação permite aos utilizadores adicionar produtos ao carrinho e finalizar a compra.
+Produtos: A aplicação tem um catálogo de produtos que os utilizadores podem visualizar e comprar.
+Categorias de produtos: A aplicação permite que os produtos sejam associados a categorias.
+Galeria de imagens do produto: A aplicação permite aos utilizadores visualizar várias imagens de um produto.
 
-Arquitetura
-A aplicação “Handy” é construída com base numa arquitetura modular utilizando a linguagem Dart. Esta estrutura consiste numa série de ficheiros .dart, cada um responsável por um conjunto específico de funcionalidades e componentes da aplicação.
-A aplicação utiliza o pacote GetX para gestão de estado e navegação. O GetX é uma biblioteca popular para o desenvolvimento de aplicações em Flutter que fornece várias funcionalidades úteis, incluindo gestão de estado e navegação.
-A aplicação também utiliza o pacote ‘GetStorage’ para armazenamento persistente de dados. O armazenamento persistente refere-se ao processo de armazenar dados no dispositivo do utilizador para que possam ser acedidos mesmo depois que a aplicação é fechada ou reiniciada.
-A aplicação também utiliza o Firebase Firestore para troca de mensagens entre compradores e vendedores. O Firebase Firestore é uma base de dados em nuvem que permite armazenar e sincronizar dados em tempo real entre diferentes dispositivos.
+Arquitectura
+A aplicação "Handy" é construída numa arquitectura modular, utilizando a linguagem Dart. Esta estrutura é composta por vários ficheiros .dart, cada um responsável por um conjunto específico de funcionalidades e componentes da aplicação.
+A aplicação usa o pacote GetX para gestão de estado e navegação. O GetX é uma biblioteca popular para o desenvolvimento de aplicações em Flutter, que fornece várias funcionalidades úteis, incluindo gestão de estado e navegação.
+A aplicação também usa o pacote 'GetStorage' para armazenamento persistente de dados. O armazenamento persistente é o processo de guardar dados no dispositivo do utilizador, para que possam ser acedidos mesmo após a aplicação ser fechada ou reiniciada.
+A aplicação também usa o Firebase Firestore para troca de mensagens entre compradores e vendedores. O Firebase Firestore é uma base de dados em nuvem que permite guardar e sincronizar dados em tempo real entre diferentes dispositivos.
