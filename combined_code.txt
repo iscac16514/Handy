@@ -1,0 +1,5265 @@
+Nota: Este documento contém todos os ficheiros .dart do meu projeto Flutter. O projeto é a aplicação móvel Handy, uma aplicação móvel que serve como plataforma única para conectar compradores e pequenos negócios locais de uma forma transparente e conveniente. A aplicação foi projetada para atender às necessidades de pessoas que preferem comprar de produtores e prestadores de serviços locais e apoiar a economia local.
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\controllers\wishlist_controller.dart
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/product_model.dart';
+
+class WishlistController extends GetxController {
+  RxList<ProductModel> wishList = <ProductModel>[].obs;
+  final box = GetStorage();
+
+  setProduct(ProductModel product) {
+    if (!isWishlist(product)) {
+      wishList.add(product);
+    } else {
+      wishList.removeWhere((element) => element.id == product.id);
+    }
+  }
+
+  isWishlist(ProductModel product) {
+    if (wishList.indexWhere((element) => element.id == product.id) == -1) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\api\auth_services.dart
+import 'dart:convert';
+
+import 'package:get_storage/get_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:handy/app/shared/values.dart';
+
+class AuthServices {
+  Future<bool> register({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      var response = await http.post(
+        Uri.parse('$baseUrl/register'),
+        headers: headerContent,
+        body: jsonEncode(
+          {
+            'name': name,
+            'username': username,
+            'email': email,
+            'password': password,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body)['data'];
+        String token = 'Bearer ${data['access_token']}';
+        saveDataToStorage('user', data['user']);
+        saveDataToStorage('token', token);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      var response = await http.post(
+        Uri.parse('$baseUrl/login'),
+        headers: headerContent,
+        body: jsonEncode(
+          {
+            'email': email,
+            'password': password,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body)['data'];
+        String token = 'Bearer ${data['access_token']}';
+        saveDataToStorage('user', data['user']);
+        saveDataToStorage('token', token);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future logout() async {
+    final token = getDataFromStorage('token');
+    var response = await http.post(Uri.parse('$baseUrl/logout'), headers: {
+      'Content-Type': 'application/json',
+      'Authorization': token,
+    });
+    if (response.statusCode == 200) {
+      removeDataFromStorage('user');
+      removeDataFromStorage('token');
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  saveDataToStorage(String key, dynamic value) {
+    final box = GetStorage();
+    return box.write(key, value);
+  }
+
+  getDataFromStorage(String key) {
+    final box = GetStorage();
+    return box.read(key);
+  }
+
+  removeDataFromStorage(String key) {
+    final box = GetStorage();
+    return box.remove(key);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\api\message_services.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:handy/app/data/models/message_model.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/data/models/user_model.dart';
+
+class MessageService {
+  FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  Stream<List<MessageModel>> getMessageByUserId({required int userId}) {
+    try {
+      return firestore
+          .collection('messages')
+          .where('userId', isEqualTo: userId)
+          .snapshots()
+          .map((QuerySnapshot list) {
+        var result = list.docs.map<MessageModel>((DocumentSnapshot message) {
+          print(message.data());
+          return MessageModel.fromJson(message.data()! as Map<String, dynamic>);
+        }).toList();
+        result.sort(
+          (MessageModel a, MessageModel b) =>
+              a.createdAt!.compareTo(b.createdAt!),
+        );
+        return result;
+      });
+    } catch (e) {
+      throw Exception(e);
+    }
+  }
+
+  Future<void> addMessage({
+    required UserModel user,
+    required bool isFromUser,
+    required String message,
+    required ProductModel product,
+  }) async {
+    try {
+      firestore.collection('messages').add({
+        'userId': user.id,
+        'userName': user.name,
+        'userImage': user.profilePhotoUrl,
+        'isFromUser': isFromUser,
+        'message': message,
+        'product': product is UnintializedProductModel ? {} : product.toJson(),
+        'createdAt': DateTime.now().toString(),
+        'updatedAt': DateTime.now().toString(),
+      }).then((value) => print('Sucesso'));
+    } catch (e) {
+      throw Exception('Erro');
+    }
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\api\product_services.dart
+import 'dart:convert';
+
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:handy/app/shared/values.dart';
+
+class ProductServices {
+  Future<List<ProductModel>> getProducts() async {
+    try {
+      var response = await http.get(
+        Uri.parse('https://api.npoint.io/20475583497e6586a401'),
+        headers: headerContent,
+      );
+
+      if (response.statusCode == 200) {
+        List data = jsonDecode(response.body)['data']['data'];
+        List<ProductModel> products = [];
+
+        for (var item in data) {
+          products.add(ProductModel.fromJson(item));
+        }
+        return products;
+      } else {
+        throw Exception('Erro ao obter produtos');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  getDataFromStorage(String key) {
+    final box = GetStorage();
+    return box.read(key);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\api\transaction_services.dart
+import 'dart:convert';
+
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/cart_model.dart';
+import 'package:handy/app/data/models/history_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:handy/app/shared/values.dart';
+
+class TransactionServices {
+  Future checkout(List<CartModel> carts, double totalPrice) async {
+    final String token = getDataFromStorage('token');
+
+    var headers = {
+      'Content-Type': 'application/json',
+      'Authorization': token,
+    };
+
+    var body = jsonEncode({
+      'address': 'Morada do cliente',
+      'items': carts
+          .map((cart) => {
+                'id': cart.product!.id,
+                'quantity': cart.quantity.value,
+              })
+          .toList(),
+      'status': "A aguardar confirmação do vendedor",
+      'total_price': totalPrice,
+      'shipping_price': 0,
+    });
+
+    var response = await http.post(Uri.parse('$baseUrl/checkout'),
+        headers: headers, body: body);
+
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  Future<List<HistoryModel>> histories() async {
+    final token = getDataFromStorage('token');
+
+    try {
+      var response =
+          await http.get(Uri.parse('$baseUrl/transactions'), headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      });
+
+      if (response.statusCode == 200) {
+        List data = jsonDecode(response.body)['data']['data'];
+        List<HistoryModel> history = [];
+
+        for (var item in data) {
+          history.add(HistoryModel.fromJson(item));
+        }
+        return history;
+      } else {
+        throw Exception('Erro');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  getDataFromStorage(String key) {
+    final box = GetStorage();
+    return box.read(key);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\cart_model.dart
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/product_model.dart';
+
+class CartModel {
+  int? id;
+  ProductModel? product;
+  RxInt quantity = 1.obs;
+
+  CartModel({this.id, this.product, required this.quantity});
+
+  CartModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    product = ProductModel.fromJson(json['product']);
+    quantity = json['quantity'];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'product': product?.toJson(),
+      'quantity': quantity,
+    };
+  }
+
+  double getTotalPrice() {
+    return (double.parse(product?.price as String) * quantity.value);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\category_model.dart
+class CategoryModel {
+  int? id;
+  String? name;
+
+  CategoryModel({this.id, this.name});
+
+  CategoryModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    name = json['name'];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+    };
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\gallery_model.dart
+class GalleryModel {
+  int? id;
+  String? url;
+
+  GalleryModel({this.id, this.url});
+
+  GalleryModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    url = json['url'];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'url': url,
+    };
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\history_model.dart
+import 'package:handy/app/data/models/item_history_model.dart';
+
+class HistoryModel {
+  int? id;
+  String? address;
+  double? totalPrice;
+  double? shippingPrice;
+  String? status;
+  String? payment;
+  DateTime? createdAt;
+  List<ItemHistory>? items;
+
+  HistoryModel({
+    this.id,
+    this.address,
+    this.totalPrice,
+    this.shippingPrice,
+    this.status,
+    this.payment,
+    this.createdAt,
+    this.items,
+  });
+
+  HistoryModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    address = json['address'];
+    totalPrice = double.parse(json['total_price'].toString());
+    shippingPrice = double.parse(json['shipping_price'].toString());
+    status = json['status'];
+    payment = json['payment'];
+    createdAt = DateTime.parse(json['created_at']);
+    items = json['items']
+        .map<ItemHistory>((item) => ItemHistory.fromJson(item))
+        .toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'address': address,
+      'total_price': totalPrice,
+      'shipping_price': shippingPrice,
+      'status': status,
+      'payment': payment,
+      'created_at': createdAt.toString(),
+      'items': items?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\item_history_model.dart
+class ItemHistory {
+  int? id;
+  int? usersId;
+  int? productsId;
+  int? transactionsId;
+  int? quantity;
+  String? createdAt;
+  Product? product;
+
+  ItemHistory(
+      {this.id,
+      this.usersId,
+      this.productsId,
+      this.transactionsId,
+      this.quantity,
+      this.createdAt,
+      this.product});
+
+  ItemHistory.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    usersId = json['users_id'];
+    productsId = json['products_id'];
+    transactionsId = json['transactions_id'];
+    quantity = json['quantity'];
+    createdAt = json['created_at'];
+    product =
+        json['product'] != null ? Product.fromJson(json['product']) : null;
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['users_id'] = usersId;
+    data['products_id'] = productsId;
+    data['transactions_id'] = transactionsId;
+    data['quantity'] = quantity;
+    data['created_at'] = createdAt;
+    if (product != null) {
+      data['product'] = product!.toJson();
+    }
+    return data;
+  }
+}
+
+class Product {
+  int? id;
+  String? name;
+  int? price;
+  String? description;
+  int? categoriesId;
+
+  Product(
+      {this.id, this.name, this.price, this.description, this.categoriesId});
+
+  Product.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    name = json['name'];
+    price = json['price'];
+    description = json['description'];
+    categoriesId = json['categories_id'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['name'] = name;
+    data['price'] = price;
+    data['description'] = description;
+    data['categories_id'] = categoriesId;
+    return data;
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\message_model.dart
+import 'package:handy/app/data/models/product_model.dart';
+
+class MessageModel {
+  String? message;
+  int? userId;
+  String? userName;
+  String? userImage;
+  bool? isFromUser;
+  ProductModel? product;
+  DateTime? createdAt;
+  DateTime? updatedAt;
+  MessageModel(
+      {this.message,
+      this.userId,
+      this.userName,
+      this.userImage,
+      this.isFromUser,
+      this.product,
+      this.createdAt,
+      this.updatedAt});
+
+  MessageModel.fromJson(Map<String, dynamic> json) {
+    message = json['message'];
+    userId = json['userId'];
+    userName = json['userName'];
+    userImage = json['userImage'];
+    isFromUser = json['isFromUser'];
+    product = json['product'].isEmpty
+        ? UnintializedProductModel()
+        : ProductModel.fromJson(json['product']);
+    createdAt = DateTime.parse(json['createdAt']);
+    updatedAt = DateTime.parse(json['updatedAt']);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'message': message,
+      'userId': userId,
+      'userName': userName,
+      'userImage': userImage,
+      'isFromUser': isFromUser,
+      'product': product is UnintializedProductModel ? {} : product?.toJson(),
+      'createdAt': createdAt.toString(),
+      'updatedAt': updatedAt.toString(),
+    };
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\product_model.dart
+import 'package:handy/app/data/models/category_model.dart';
+import 'package:handy/app/data/models/gallery_model.dart';
+
+class ProductModel {
+  int? id;
+  String? name;
+  double? price;
+  String? description;
+  String? tags;
+  CategoryModel? category;
+  DateTime? createdAt;
+  DateTime? updatedAt;
+  List<GalleryModel>? galleries;
+
+  ProductModel({
+    this.id,
+    this.name,
+    this.price,
+    this.description,
+    this.tags,
+    this.category,
+    this.createdAt,
+    this.updatedAt,
+    this.galleries,
+  });
+
+  ProductModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    name = json['name'];
+    price = double.parse(json['price'].toString());
+    description = json['description'];
+    tags = json['tags'];
+    category = CategoryModel.fromJson(json['category']);
+    galleries = json['galleries']
+        .map<GalleryModel>((gallery) => GalleryModel.fromJson(gallery))
+        .toList();
+    createdAt = DateTime.parse(json['created_at']);
+    updatedAt = DateTime.parse(json['updated_at']);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'price': price,
+      'description': description,
+      'tags': tags,
+      'category': category?.toJson(),
+      'galleries': galleries?.map((gallery) => gallery.toJson()).toList(),
+      'created_at': createdAt.toString(),
+      'updated_at': updatedAt.toString(),
+    };
+  }
+}
+
+class UnintializedProductModel extends ProductModel {}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\data\models\user_model.dart
+class UserModel {
+  int? id;
+  String? name;
+  String? email;
+  String? username;
+  String? profilePhotoUrl;
+  String? token;
+
+  UserModel({
+    this.id,
+    this.name,
+    this.email,
+    this.username,
+    this.profilePhotoUrl,
+    this.token,
+  });
+
+  UserModel.fromJson(Map<String, dynamic> json) {
+    id = json['id'];
+    name = json['name'];
+    email = json['email'];
+    username = json['username'];
+    profilePhotoUrl = json['profile_photo_url'];
+    token = json['token'];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'username': username,
+      'profile_photo_url': profilePhotoUrl,
+      'token': token,
+    };
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\cart\bindings\cart_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/cart_controller.dart';
+
+class CartBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<CartController>(
+      () => CartController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\cart\controllers\cart_controller.dart
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/cart_model.dart';
+import 'package:handy/app/data/models/product_model.dart';
+
+class CartController extends GetxController {
+  RxList<CartModel> carts = <CartModel>[].obs;
+
+  addCart(ProductModel product) {
+    if (productExist(product)) {
+      int index =
+          carts.indexWhere((element) => element.product?.id == product.id);
+      carts[index].quantity.value++;
+    } else {
+      carts.add(
+        CartModel(
+          id: carts.length,
+          product: product,
+          quantity: RxInt(1),
+        ),
+      );
+    }
+  }
+
+  removeCart(int id) {
+    carts.removeAt(id);
+  }
+
+  addQuantity(int id) {
+    carts[id].quantity.value++;
+  }
+
+  reduceQuantity(int id) {
+    carts[id].quantity.value--;
+
+    if (carts[id].quantity.value == 0) {
+      removeCart(id);
+    }
+  }
+
+  totalItems() {
+    int total = 0;
+    for (var element in carts) {
+      total += element.quantity.value;
+    }
+    return total;
+  }
+
+  totalPrice() {
+    double total = 0;
+    for (var element in carts) {
+      total += (element.quantity.value * element.product!.price!);
+    }
+    return total;
+  }
+
+  productExist(ProductModel product) {
+    if (carts.indexWhere((element) => element.product?.id == product.id) ==
+        -1) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\cart\views\cart_view.dart
+// ignore_for_file: invalid_use_of_protected_member, avoid_print
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/modules/cart/controllers/cart_controller.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/cart_card.dart';
+
+class CartView extends GetView<CartController> {
+  const CartView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    PreferredSizeWidget header() {
+      return PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: background1Color,
+          centerTitle: true,
+          title: Text(
+            'O seu carrinho',
+            style: primaryTextStyle.copyWith(
+              fontSize: 18,
+              fontWeight: medium,
+            ),
+          ),
+          elevation: 0,
+        ),
+      );
+    }
+
+    Widget emptyCart() {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/icon_cart_info.png',
+              width: 80,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            Text(
+              'O seu carrinho está vazio',
+              style: primaryTextStyle.copyWith(
+                fontSize: 16,
+                fontWeight: medium,
+              ),
+            ),
+            const SizedBox(
+              height: 12,
+            ),
+            Text(
+              'Encontre produtos locais para si',
+              style: subtitleTextStyle,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            SizedBox(
+              height: 44,
+              child: TextButton(
+                onPressed: () => Get.offAndToNamed(Routes.MAIN),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
+                  backgroundColor: primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Explorar loja',
+                  style: primaryTextStyle.copyWith(
+                    fontSize: 16,
+                    fontWeight: medium,
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    Widget content() {
+      return Obx(
+        () => ListView(
+          padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+          children: controller.carts.value
+              .map(
+                (cart) => CartCard(
+                  cart: cart,
+                ),
+              )
+              .toList(),
+        ),
+      );
+    }
+
+    Widget customBottomNav() {
+      return SizedBox(
+        height: 130,
+        child: Column(
+          children: [
+            const SizedBox(
+              height: 5,
+            ),
+            Container(
+              margin: EdgeInsets.symmetric(horizontal: defaultMargin),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Subtotal',
+                    style: primaryTextStyle,
+                  ),
+                  Obx(
+                    () => Text(
+                      '\$${controller.totalPrice()}',
+                      style: priceTextStyle.copyWith(
+                          fontSize: 16, fontWeight: semiBold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(
+              height: 5,
+            ),
+            Divider(
+              thickness: 0.4,
+              color: subtitleColor,
+            ),
+            const SizedBox(
+              height: 15,
+            ),
+            Container(
+              height: 50,
+              margin: EdgeInsets.symmetric(horizontal: defaultMargin),
+              child: TextButton(
+                onPressed: () => Get.toNamed(Routes.CHECKOUT),
+                style: TextButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    )),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Finalizar pedido',
+                      style: primaryTextStyle.copyWith(
+                        fontSize: 16,
+                        fontWeight: semiBold,
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward,
+                      color: primaryTextColor,
+                    )
+                  ],
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    print('data carts = ${controller.carts.value}');
+
+    return Obx(
+      () => Scaffold(
+        backgroundColor: background3Color,
+        appBar: header(),
+        body: controller.carts.value.isEmpty ? emptyCart() : content(),
+        bottomNavigationBar: controller.carts.value.isEmpty
+            ? const SizedBox()
+            : customBottomNav(),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\chat\chat.screen.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/data/api/message_services.dart';
+import 'package:handy/app/data/models/message_model.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/chat_tile.dart';
+
+import 'controllers/chat.controller.dart';
+
+class ChatScreen extends GetView<ChatController> {
+  ChatScreen({Key? key}) : super(key: key);
+  @override
+  final controller = Get.put(ChatController());
+  Widget header() {
+    return AppBar(
+      backgroundColor: background1Color,
+      centerTitle: true,
+      title: Text(
+        'Mensagens',
+        style: primaryTextStyle.copyWith(
+          fontSize: 18,
+          fontWeight: medium,
+        ),
+      ),
+      elevation: 0,
+      automaticallyImplyLeading: false,
+    );
+  }
+
+  Widget emptyChat() {
+    return Expanded(
+      child: Container(
+        width: double.infinity,
+        color: background3Color,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/icon_message_info.png',
+              width: 80,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            Text(
+              'Sem mensagens',
+              style: primaryTextStyle.copyWith(
+                fontSize: 16,
+                fontWeight: medium,
+              ),
+            ),
+            const SizedBox(
+              height: 12,
+            ),
+            Text(
+              'Ainda não iniciou nenhuma conversa com vendedores',
+              style: subtitleTextStyle,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget content() {
+    return StreamBuilder<List<MessageModel>>(
+        stream: MessageService().getMessageByUserId(
+          userId: controller.user.id!,
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (snapshot.hasData) {
+            if (snapshot.data!.isEmpty) {
+              return emptyChat();
+            }
+            return Expanded(
+              child: Container(
+                width: double.infinity,
+                color: background3Color,
+                child: ListView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: defaultMargin,
+                  ),
+                  children: [
+                    ChatTile(
+                        message: snapshot.data![snapshot.data!.length - 1]),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            return emptyChat();
+          }
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        header(),
+        content(),
+      ],
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\chat\controllers\chat.controller.dart
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/user_model.dart';
+
+class ChatController extends GetxController {
+  //TODO: Implement ChatController
+
+  late UserModel user;
+  final count = 0.obs;
+  @override
+  void onInit() {
+    super.onInit();
+    getDataUser();
+  }
+
+  getDataUser() async {
+    final box = GetStorage();
+    final data = box.read('user');
+    user = UserModel();
+    user = UserModel.fromJson(data);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\chatpage\bindings\chatpage_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/chatpage_controller.dart';
+
+class ChatpageBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<ChatpageController>(
+      () => ChatpageController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\chatpage\controllers\chatpage_controller.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/data/models/user_model.dart';
+
+class ChatpageController extends GetxController {
+  //TODO: Implement ChatpageController
+
+  Rx<ProductModel> product = ProductModel().obs;
+  late TextEditingController chatC;
+
+  late UserModel user;
+
+  @override
+  void onInit() {
+    product(Get.arguments);
+    super.onInit();
+    chatC = TextEditingController(text: '');
+    getDataUser();
+  }
+
+  getDataUser() async {
+    final box = GetStorage();
+    final data = box.read('user');
+    user = UserModel();
+    user = UserModel.fromJson(data);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\chatpage\views\chatpage_view.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/api/message_services.dart';
+import 'package:handy/app/data/models/message_model.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/chat_bubble.dart';
+
+import '../controllers/chatpage_controller.dart';
+
+class ChatpageView extends GetView<ChatpageController> {
+  const ChatpageView({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    PreferredSizeWidget header() {
+      return PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: background1Color,
+          centerTitle: false,
+          title: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: blueColor,
+                radius: 23,
+                child: Stack(
+                  alignment: AlignmentDirectional.center,
+                  children: [
+                    Image.asset(
+                      'assets/img_logo.png',
+                      width: 25,
+                      color: Colors.white,
+                    ),
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: background3Color,
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.circle,
+                            color: Colors.green,
+                            size: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Vendedor',
+                    style: primaryTextStyle.copyWith(
+                      fontWeight: medium,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    'Online',
+                    style: secondaryTextStyle.copyWith(
+                      fontWeight: light,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget productPreview() {
+      return Obx(
+        () => Container(
+          width: 225,
+          height: 74,
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: background5Color,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: primaryColor,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  controller.product.value.galleries![0].url.toString(),
+                  width: 54,
+                ),
+              ),
+              const SizedBox(
+                width: 10,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      controller.product.value.name.toString(),
+                      style: primaryTextStyle,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(
+                      height: 2,
+                    ),
+                    Text(
+                      '\$${controller.product.value.price}',
+                      style: priceTextStyle.copyWith(
+                        fontWeight: medium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: () {
+                  controller.product(UnintializedProductModel());
+                },
+                child: Image.asset(
+                  'assets/icon_close.png',
+                  width: 22,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget chatInput() {
+      return Container(
+        margin: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Obx(
+                () => controller.product.value is UnintializedProductModel
+                    ? const SizedBox()
+                    : productPreview(),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 45,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: background4Color,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: TextFormField(
+                        controller: controller.chatC,
+                        style: primaryTextStyle,
+                        decoration: InputDecoration.collapsed(
+                          hintText: 'Escrever mensagem...',
+                          hintStyle: subtitleTextStyle,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                    width: 20,
+                  ),
+                  InkWell(
+                    onTap: () async {
+                      await MessageService().addMessage(
+                        user: controller.user,
+                        isFromUser: true,
+                        message: controller.chatC.text,
+                        product: controller.product.value,
+                      );
+
+                      controller.product(UnintializedProductModel());
+                      controller.chatC.text = '';
+                    },
+                    child: Container(
+                      width: 45,
+                      height: 45,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
+                      child: Image.asset(
+                        'assets/icon_submit.png',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget content() {
+      return StreamBuilder<List<MessageModel>>(
+        stream: MessageService().getMessageByUserId(userId: controller.user.id!),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return ListView(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              reverse: false,
+              children: snapshot.data!
+                  .map((MessageModel message) => ChatBubble(
+                        isSender: message.isFromUser!,
+                        text: message.message!,
+                        product: message.product!,
+                      ))
+                  .toList(),
+            );
+          } else {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+        },
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: background3Color,
+      appBar: header(),
+      body: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: Column(
+          children: [
+            Expanded(
+              child: content(),
+            ),
+            chatInput(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout\bindings\checkout_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/checkout_controller.dart';
+
+class CheckoutBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<CheckoutController>(
+      () => CheckoutController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout\controllers\checkout_controller.dart
+import 'package:get/get.dart';
+import 'package:handy/app/data/api/transaction_services.dart';
+import 'package:handy/app/data/models/cart_model.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/state.dart';
+
+class CheckoutController extends GetxController {
+  final dataState = DataState.loading.obs;
+
+  postCheckout(List<CartModel> carts, double totalPrice) async {
+    final checkout = await TransactionServices().checkout(carts, totalPrice);
+    print(checkout);
+    if (checkout == true) {
+      Get.snackbar('Successo', 'Pedido realizado com sucesso');
+      Get.offAndToNamed(Routes.CHECKOUT_SUCCESS);
+    } else {
+      Get.snackbar('Erro', 'Ocorreu um erro no seu pedido');
+    }
+  }
+
+  changeState(DataState state) {
+    dataState(state);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout\views\checkout_view.dart
+// ignore_for_file: invalid_use_of_protected_member
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/modules/cart/controllers/cart_controller.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/checkout_card.dart';
+import '../controllers/checkout_controller.dart';
+
+class CheckoutView extends GetView<CheckoutController> {
+  CheckoutView({Key? key}) : super(key: key);
+
+  final cartController = Get.put(CartController(), permanent: true);
+  @override
+  Widget build(BuildContext context) {
+    PreferredSizeWidget header() {
+      return PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: background1Color,
+          centerTitle: true,
+          title: Text(
+            'Finalizar pedido',
+            style: primaryTextStyle.copyWith(
+              fontSize: 18,
+              fontWeight: medium,
+            ),
+          ),
+          elevation: 0,
+        ),
+      );
+    }
+
+    Widget content() {
+      return ListView(
+        padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+        children: [
+          // Listar carrinho
+          Container(
+            margin: const EdgeInsets.only(top: 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Listagem de produtos',
+                  style: primaryTextStyle.copyWith(
+                      fontSize: 16, fontWeight: medium),
+                ),
+                Column(
+                  children: cartController.carts.value
+                      .map(
+                        (cart) => CheckoutCard(cart: cart),
+                      )
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+          //Detalhes de morada
+          Container(
+            margin: EdgeInsets.only(top: defaultMargin),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: background4Color,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Detalhes de localização',
+                  style: primaryTextStyle.copyWith(
+                    fontSize: 16,
+                    fontWeight: medium,
+                  ),
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                Row(
+                  children: [
+                    Column(
+                      children: [
+                        Image.asset(
+                          'assets/icon_store.png',
+                          width: 40,
+                        ),
+                        Image.asset(
+                          'assets/icon_line.png',
+                          height: 30,
+                        ),
+                        Image.asset(
+                          'assets/icon_location.png',
+                          width: 40,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Localização do vendedor',
+                          style: secondaryTextStyle.copyWith(
+                              fontSize: 12, fontWeight: medium),
+                        ),
+                        Text(
+                          'Coimbra',
+                          style: primaryTextStyle.copyWith(
+                            fontWeight: medium,
+                          ),
+                        ),
+                        SizedBox(
+                          height: defaultMargin,
+                        ),
+                        Text(
+                          'A sua localização',
+                          style: secondaryTextStyle.copyWith(
+                              fontSize: 12, fontWeight: medium),
+                        ),
+                        Text(
+                          'Coimbra',
+                          style: primaryTextStyle.copyWith(
+                            fontWeight: medium,
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Payment Summary
+          Container(
+            margin: EdgeInsets.only(top: defaultMargin),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: background4Color,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Resumo',
+                  style: primaryTextStyle.copyWith(
+                      fontSize: 16, fontWeight: medium),
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Quantidade de produtos',
+                      style: secondaryTextStyle.copyWith(
+                        fontSize: 12,
+                        fontWeight: medium,
+                      ),
+                    ),
+                    Text(
+                      '${cartController.totalItems()} produtos',
+                      style: primaryTextStyle.copyWith(
+                        fontWeight: medium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Preço dos produtos',
+                      style: secondaryTextStyle.copyWith(
+                        fontSize: 12,
+                        fontWeight: medium,
+                      ),
+                    ),
+                    Text(
+                      '€${cartController.totalPrice()}',
+                      style: primaryTextStyle.copyWith(
+                        fontWeight: medium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Portes de envio',
+                      style: secondaryTextStyle.copyWith(
+                        fontSize: 12,
+                        fontWeight: medium,
+                      ),
+                    ),
+                    Text(
+                      'Grátis',
+                      style: primaryTextStyle.copyWith(
+                        fontWeight: medium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                const Divider(
+                  thickness: 1,
+                  color: Color(0xff2E3141),
+                ),
+                const SizedBox(
+                  height: 10,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total',
+                      style: priceTextStyle.copyWith(
+                        fontWeight: semiBold,
+                      ),
+                    ),
+                    Text(
+                      '€${cartController.totalPrice()}',
+                      style: priceTextStyle.copyWith(
+                        fontWeight: semiBold,
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+
+          // Button Checkout
+          SizedBox(
+            height: defaultMargin,
+          ),
+          const Divider(
+            thickness: 1,
+            color: Color(0xff2E3141),
+          ),
+          Container(
+            height: 50,
+            width: double.infinity,
+            margin: EdgeInsets.symmetric(vertical: defaultMargin),
+            child: TextButton(
+              onPressed: () {
+                controller.postCheckout(
+                    cartController.carts, cartController.totalPrice());
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: primaryColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                'Finalizar pedido',
+                style: primaryTextStyle.copyWith(
+                    fontSize: 16, fontWeight: semiBold),
+              ),
+            ),
+          )
+        ],
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: background3Color,
+      appBar: header(),
+      body: content(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout_success\bindings\checkout_success_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/checkout_success_controller.dart';
+
+class CheckoutSuccessBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<CheckoutSuccessController>(
+      () => CheckoutSuccessController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout_success\controllers\checkout_success_controller.dart
+import 'package:get/get.dart';
+
+class CheckoutSuccessController extends GetxController {
+  //TODO: Implement CheckoutSuccessController
+
+  final count = 0.obs;
+
+
+
+  void increment() => count.value++;
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\checkout_success\views\checkout_success_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/checkout_success_controller.dart';
+
+class CheckoutSuccessView extends GetView<CheckoutSuccessController> {
+  const CheckoutSuccessView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    PreferredSize header() {
+      return PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: background1Color,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          centerTitle: true,
+          title: Text(
+            'Pedido realizado com sucesso',
+            style: primaryTextStyle,
+          ),
+        ),
+      );
+    }
+
+    Widget content() {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/icon_cart_info.png',
+              width: 80,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            Text(
+              'Realizou um pedido',
+              style: primaryTextStyle.copyWith(
+                fontSize: 16,
+                fontWeight: medium,
+              ),
+            ),
+            const SizedBox(
+              height: 12,
+            ),
+            Text(
+              'Aguarde pela conclusão do seu pedido',
+              style: subtitleTextStyle,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(
+              height: 20,
+            ),
+            SizedBox(
+              height: 44,
+              child: TextButton(
+                onPressed: () => Get.offAndToNamed(Routes.MAIN),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
+                  backgroundColor: primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Veja outros produtos',
+                  style: primaryTextStyle.copyWith(
+                    fontSize: 16,
+                    fontWeight: medium,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(
+              height: 12,
+            ),
+            SizedBox(
+              height: 44,
+              child: TextButton(
+                onPressed: () => Get.offAndToNamed(Routes.MAIN),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
+                  backgroundColor: const Color(0xff39374B),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Ver o meu pedido',
+                  style: primaryTextStyle.copyWith(
+                    fontSize: 16,
+                    fontWeight: medium,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: background3Color,
+      appBar: header(),
+      body: content(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\detail_histories\bindings\detail_histories_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/detail_histories_controller.dart';
+
+class DetailHistoriesBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<DetailHistoriesController>(
+      () => DetailHistoriesController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\detail_histories\controllers\detail_histories_controller.dart
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/history_model.dart';
+
+class DetailHistoriesController extends GetxController {
+  //TODO: Implement DetailHistoriesController
+  final count = 0.obs;
+  Rx<HistoryModel> history = HistoryModel().obs;
+  @override
+  void onInit() {
+    super.onInit();
+    history(Get.arguments);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\detail_histories\views\detail_histories_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/item_history_card.dart';
+
+import '../controllers/detail_histories_controller.dart';
+
+class DetailHistoriesView extends GetView<DetailHistoriesController> {
+  const DetailHistoriesView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+        backgroundColor: background3Color,
+        appBar: AppBar(
+          backgroundColor: background1Color,
+          title: Text(
+            'Detalhes',
+            style: primaryTextStyle,
+          ),
+          centerTitle: true,
+        ),
+        body: Container(
+          margin: EdgeInsets.symmetric(horizontal: defaultMargin),
+          padding: EdgeInsets.only(top: defaultMargin),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Detalhes do pedido',
+                style: primaryTextStyle.copyWith(fontSize: 16),
+              ),
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                    color: background5Color,
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Localização',
+                                style: secondaryTextStyle,
+                              ),
+                              Text(
+                                'Estado',
+                                style: secondaryTextStyle,
+                              ),
+                              Text(
+                                'Pagamento',
+                                style: secondaryTextStyle,
+                              ),
+                              Text(
+                                'Portes de envio',
+                                style: secondaryTextStyle,
+                              ),
+                              Text(
+                                'Preço total',
+                                style: secondaryTextStyle,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(
+                            width: 10,
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  controller.history.value.address.toString(),
+                                  style: primaryTextStyle,
+                                ),
+                                Text(
+                                  controller.history.value.status.toString(),
+                                  style: primaryTextStyle,
+                                ),
+                                Text(
+                                  controller.history.value.payment.toString(),
+                                  style: primaryTextStyle,
+                                ),
+                                Text(
+                                  controller.history.value.shippingPrice
+                                      .toString(),
+                                  style: primaryTextStyle,
+                                ),
+                                Text(
+                                  controller.history.value.totalPrice
+                                      .toString(),
+                                  style: primaryTextStyle,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: defaultMargin,
+              ),
+              Text(
+                'Produtos',
+                style: primaryTextStyle.copyWith(fontSize: 16),
+              ),
+              Column(
+                children: controller.history.value.items!
+                    .map(
+                      (item) => ItemHistoryCard(
+                        item: item,
+                      ),
+                    )
+                    .toList(),
+              )
+            ],
+          ),
+        ));
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\editprofile\bindings\editprofile_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/editprofile_controller.dart';
+
+class EditprofileBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<EditprofileController>(
+      () => EditprofileController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\editprofile\controllers\editprofile_controller.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/models/user_model.dart';
+
+class EditprofileController extends GetxController {
+  late TextEditingController nameC;
+  late TextEditingController usernameC;
+  late TextEditingController emailC;
+
+  final box = GetStorage();
+  late UserModel user;
+  @override
+  void onInit() {
+    // TODO: implement onInit
+    super.onInit();
+    final data = box.read('user');
+    user = UserModel.fromJson(data);
+
+    nameC = TextEditingController(text: user.name);
+    usernameC = TextEditingController(text: user.username);
+    emailC = TextEditingController(text: user.email);
+  }
+
+  @override
+  void onClose() {
+    // TODO: implement onClose
+    super.onClose();
+    nameC.dispose();
+    emailC.dispose();
+    usernameC.dispose();
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\editprofile\views\editprofile_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/editprofile_controller.dart';
+
+class EditprofileView extends GetView<EditprofileController> {
+  const EditprofileView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    PreferredSize header() {
+      return PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: background1Color,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          centerTitle: true,
+          title: Text(
+            'Editar perfil',
+            style: primaryTextStyle,
+          ),
+          leading: IconButton(
+            onPressed: () => Get.back(),
+            icon: const Icon(Icons.close),
+          ),
+          actions: [
+            IconButton(
+              onPressed: () {},
+              icon: Icon(
+                Icons.check,
+                color: primaryColor,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget nameInput() {
+      return Container(
+        margin: EdgeInsets.only(top: defaultMargin),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Primeiro e último nome',
+              style: secondaryTextStyle.copyWith(fontSize: 13),
+            ),
+            TextFormField(
+              controller: controller.nameC,
+              style: primaryTextStyle,
+              decoration: InputDecoration(
+                hintText: 'Escreva o seu nome...',
+                hintStyle: primaryTextStyle,
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: subtitleColor,
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    Widget usernameInput() {
+      return Container(
+        margin: EdgeInsets.only(top: defaultMargin),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nome de utilizador',
+              style: secondaryTextStyle.copyWith(fontSize: 13),
+            ),
+            TextFormField(
+              controller: controller.usernameC,
+              style: primaryTextStyle,
+              decoration: InputDecoration(
+                hintText: 'Escreva o seu nome de utilizador...',
+                hintStyle: primaryTextStyle,
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: subtitleColor,
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    Widget emailInput() {
+      return Container(
+        margin: EdgeInsets.only(top: defaultMargin),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Endereço de e-mail',
+              style: secondaryTextStyle.copyWith(fontSize: 13),
+            ),
+            TextFormField(
+              controller: controller.emailC,
+              style: primaryTextStyle,
+              decoration: InputDecoration(
+                hintText: 'Escreva o seu e-mail...',
+                hintStyle: primaryTextStyle,
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: subtitleColor,
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    Widget content() {
+      return ListView(
+        padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            margin: EdgeInsets.only(top: defaultMargin),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              image: DecorationImage(
+                image: NetworkImage(
+                  controller.user.profilePhotoUrl.toString(),
+                ),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          nameInput(),
+          usernameInput(),
+          emailInput(),
+        ],
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: background3Color,
+      appBar: header(),
+      body: content(),
+      resizeToAvoidBottomInset: false,
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\histories\bindings\histories_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/histories_controller.dart';
+
+class HistoriesBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<HistoriesController>(
+      () => HistoriesController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\histories\controllers\histories_controller.dart
+import 'package:get/get.dart';
+
+class HistoriesController extends GetxController {
+  //TODO: Implement HistoriesController
+
+  final count = 0.obs;
+
+
+
+  void increment() => count.value++;
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\histories\views\histories_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/data/api/transaction_services.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/histories_controller.dart';
+
+class HistoriesView extends GetView<HistoriesController> {
+  const HistoriesView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: background3Color,
+      appBar: AppBar(
+        backgroundColor: background1Color,
+        title: Text(
+          'Histórico de pedidos',
+          style: primaryTextStyle,
+        ),
+        centerTitle: true,
+      ),
+      body: FutureBuilder(
+        future: TransactionServices().histories(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                      color: primaryTextColor, strokeWidth: 2.0),
+                  const SizedBox(
+                    height: 5,
+                  ),
+                  Text(
+                    'A carregar dados...',
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 12,
+                      fontWeight: medium,
+                    ),
+                  )
+                ],
+              ),
+            );
+          }
+          return Container(
+            margin: EdgeInsets.only(top: defaultMargin),
+            padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+            child: ListView.builder(
+              itemCount: snapshot.data?.length,
+              itemBuilder: (context, index) {
+                print(snapshot.data);
+                return InkWell(
+                  onTap: () => Get.toNamed(
+                    Routes.DETAIL_HISTORIES,
+                    arguments: snapshot.data?[index],
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: background5Color,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      title: Text(
+                        snapshot.data![index].status.toString(),
+                        style: primaryTextStyle,
+                      ),
+                      subtitle: Text(
+                        snapshot.data![index].createdAt.toString(),
+                        style: primaryTextStyle.copyWith(
+                          color: subtitleColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: Text(
+                        '€${snapshot.data![index].totalPrice}',
+                        style: priceTextStyle.copyWith(),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\home\controllers\home.controller.dart
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/api/product_services.dart';
+import 'package:handy/app/data/api/transaction_services.dart';
+import 'package:handy/app/data/models/user_model.dart';
+import 'package:handy/app/shared/state.dart';
+
+class HomeController extends GetxController {
+  late UserModel user;
+
+  final dataState = DataState.loading.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    getDataUser();
+    getProducts();
+    getHistories();
+  }
+
+  final RxList<dynamic> listProducts = [].obs;
+  final RxList<dynamic> listHistories = [].obs;
+
+  Future<void> getProducts() async {
+    changeState(DataState.loading);
+    try {
+      List<dynamic> products = await ProductServices().getProducts();
+      listProducts(products);
+      changeState(DataState.done);
+    } catch (e) {
+      print(e.toString());
+    }
+  }
+
+  Future<void> getHistories() async {
+    changeState(DataState.loading);
+    try {
+      List<dynamic> histories = await TransactionServices().histories();
+      listHistories(histories);
+      print(histories);
+      changeState(DataState.done);
+    } catch (e) {
+      print(e.toString());
+    }
+  }
+
+  getDataUser() async {
+    final box = GetStorage();
+    final data = box.read('user');
+    user = UserModel();
+    user = UserModel.fromJson(data);
+    print(box.read('token'));
+  }
+
+  changeState(DataState state) {
+    dataState(state);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\home\home.screen.dart
+// ignore_for_file: invalid_use_of_protected_member
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/shared/state.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/product_card.dart';
+import 'package:handy/app/widgets/product_tile.dart';
+import 'controllers/home.controller.dart';
+
+class HomeScreen extends GetView<HomeController> {
+  HomeScreen({Key? key}) : super(key: key);
+  @override
+  final controller = Get.put(HomeController());
+  @override
+  Widget build(BuildContext context) {
+    Widget header() {
+      return Container(
+        margin: EdgeInsets.only(
+          top: defaultMargin,
+          left: defaultMargin,
+          right: defaultMargin,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Olá ${controller.user.name ?? ''}',
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 24,
+                      fontWeight: semiBold,
+                    ),
+                  ),
+                  Text(
+                    '@${controller.user.username ?? ''}',
+                    style: subtitleTextStyle.copyWith(fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                image: DecorationImage(
+                  image: NetworkImage(controller.user.profilePhotoUrl ?? ''),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    Widget title({required String title}) {
+      return Container(
+        margin: EdgeInsets.only(
+          top: defaultMargin,
+          left: defaultMargin,
+          right: defaultMargin,
+        ),
+        child: Text(
+          title,
+          style: primaryTextStyle.copyWith(
+            fontSize: 22,
+            fontWeight: semiBold,
+          ),
+        ),
+      );
+    }
+
+    Widget popularProduct() {
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Obx(
+            () => Row(
+              children: [
+                SizedBox(
+                  width: defaultMargin,
+                ),
+                Row(
+                  children: controller.listProducts.value
+                      .map((product) => ProductCard(
+                            product: product,
+                          ))
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget newArrivals() {
+      return Container(
+        margin: const EdgeInsets.only(
+          top: 14,
+        ),
+        child: Obx(
+          () => Column(
+            children: controller.listProducts.value
+                .map((product) => ProductTile(product: product))
+                .toList(),
+          ),
+        ),
+      );
+    }
+
+    return controller.dataState.value == DataState.loading
+        ? Center(
+            child: CircularProgressIndicator(
+              color: primaryTextColor,
+              strokeWidth: 2,
+            ),
+          )
+        : ListView(
+            children: [
+              header(),
+              title(title: 'Produtos populares'),
+              popularProduct(),
+              title(title: 'Veja mais'),
+              newArrivals(),
+            ],
+          );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\main\bindings\main_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/main_controller.dart';
+
+class MainBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<MainController>(
+      () => MainController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\main\controllers\main_controller.dart
+import 'package:get/get.dart';
+
+class MainController extends GetxController {
+  final currentIndex = 0.obs;
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\main\views\main_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/modules/cart/controllers/cart_controller.dart';
+import 'package:handy/app/modules/chat/chat.screen.dart';
+import 'package:handy/app/modules/home/home.screen.dart';
+import 'package:handy/app/modules/profile/profile.screen.dart';
+import 'package:handy/app/modules/wishlist/wishlist.screen.dart';
+import 'package:handy/app/routes/app_pages.dart';
+
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/main_controller.dart';
+
+class MainView extends GetView<MainController> {
+  MainView({Key? key}) : super(key: key);
+  final cartController = Get.put(CartController());
+  @override
+  Widget build(BuildContext context) {
+    Widget cartButton() {
+      return FloatingActionButton(
+        onPressed: () => Get.toNamed(Routes.CART),
+        backgroundColor: blueColor,
+        child: Image.asset(
+          'assets/icon_cart.png',
+          width: 20,
+        ),
+      );
+    }
+
+    Widget customBottomNav() {
+      return ClipRRect(
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(30),
+        ),
+        child: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 12,
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          child: Obx(
+            () => BottomNavigationBar(
+              elevation: 0,
+              backgroundColor: background4Color,
+              currentIndex: controller.currentIndex.value,
+              onTap: (value) {
+                controller.currentIndex(value);
+              },
+              type: BottomNavigationBarType.fixed,
+              items: [
+                BottomNavigationBarItem(
+                  icon: Container(
+                    margin: const EdgeInsets.only(top: 20, bottom: 10),
+                    child: Image.asset(
+                      'assets/icon_home.png',
+                      width: 21,
+                      color: controller.currentIndex.value == 0
+                          ? blueColor
+                          : const Color(0xff808191),
+                    ),
+                  ),
+                  label: '',
+                ),
+                BottomNavigationBarItem(
+                  icon: Container(
+                    margin: const EdgeInsets.only(top: 20, bottom: 10),
+                    child: Image.asset(
+                      'assets/icon_message.png',
+                      width: 20,
+                      color: controller.currentIndex.value == 1
+                          ? blueColor
+                          : const Color(0xff808191),
+                    ),
+                  ),
+                  label: '',
+                ),
+                BottomNavigationBarItem(
+                  icon: Container(
+                    margin: const EdgeInsets.only(top: 20, bottom: 10),
+                    child: Image.asset(
+                      'assets/icon_favorite.png',
+                      width: 20,
+                      color: controller.currentIndex.value == 2
+                          ? blueColor
+                          : const Color(0xff808191),
+                    ),
+                  ),
+                  label: '',
+                ),
+                BottomNavigationBarItem(
+                  icon: Container(
+                    margin: const EdgeInsets.only(top: 20, bottom: 10),
+                    child: Image.asset(
+                      'assets/icon_profile.png',
+                      width: 20,
+                      color: controller.currentIndex.value == 3
+                          ? blueColor
+                          : const Color(0xff808191),
+                    ),
+                  ),
+                  label: '',
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget body() {
+      switch (controller.currentIndex.value) {
+        case 0:
+          return HomeScreen();
+        case 1:
+          return ChatScreen();
+        case 2:
+          return WishlistScreen();
+        case 3:
+          return ProfileScreen();
+        default:
+          return Container();
+      }
+    }
+
+    return Scaffold(
+      backgroundColor: controller.currentIndex.value == 0
+          ? background1Color
+          : background3Color,
+      body: Obx(() => body()),
+      floatingActionButton: cartButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: customBottomNav(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\product\bindings\product_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/product_controller.dart';
+
+class ProductBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<ProductController>(
+      () => ProductController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\product\controllers\product_controller.dart
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/product_model.dart';
+
+class ProductController extends GetxController {
+  //TODO: Implement ProductController
+
+  List images = [
+    'assets/img_1.png',
+    'assets/img_1.png',
+    'assets/img_1.png',
+  ];
+  int index = -1;
+  int indexFamiliar = -1;
+  RxInt currentIndex = 0.obs;
+
+  List familiarProducts = [
+    'assets/img_2.jpg',
+    'assets/img_3.jpg',
+    'assets/img_4.jpg',
+    'assets/img_5.jpg',
+    'assets/img_6.jpg',
+    'assets/img_7.jpg',
+  ];
+
+  Rx<ProductModel> product = ProductModel().obs;
+
+  @override
+  void onInit() {
+    // TODO: implement onInit
+    super.onInit();
+    product(Get.arguments);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\product\views\product_view.dart
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/controllers/wishlist_controller.dart';
+import 'package:handy/app/modules/cart/controllers/cart_controller.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/product_controller.dart';
+
+class ProductView extends GetView<ProductController> {
+  ProductView({Key? key}) : super(key: key);
+
+  final wishlistController = Get.put(WishlistController());
+  final cartController = Get.put(CartController());
+
+  @override
+  Widget build(BuildContext context) {
+    Future<void> showSuccessDialog() async {
+      return showDialog(
+        context: context,
+        builder: (context) => SizedBox(
+          width: MediaQuery.of(context).size.width - (2 * defaultMargin),
+          child: AlertDialog(
+            backgroundColor: background3Color,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      onPressed: () => Get.back(),
+                      icon: Icon(
+                        Icons.close,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  Image.asset(
+                    'assets/icon_success_info.png',
+                    width: 100,
+                  ),
+                  const SizedBox(
+                    height: 12,
+                  ),
+                  Text(
+                    'Sucesso',
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 18,
+                      fontWeight: semiBold,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 12,
+                  ),
+                  Text(
+                    'Produto adicionado ao carrinho',
+                    style: secondaryTextStyle,
+                  ),
+                  const SizedBox(
+                    height: 20,
+                  ),
+                  TextButton(
+                    onPressed: () => Get.toNamed(Routes.CART),
+                    style: TextButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        backgroundColor: primaryColor),
+                    child: Text(
+                      'Ver carrinho',
+                      style: primaryTextStyle.copyWith(
+                        fontSize: 16,
+                        fontWeight: semiBold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget indicator(int index) {
+      return Obx(
+        () => Container(
+          width: controller.currentIndex.value == index ? 16 : 4,
+          height: 4,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: controller.currentIndex.value == index
+                ? primaryColor
+                : const Color(0xffC4C4C4),
+          ),
+        ),
+      );
+    }
+
+    Widget familiarProductsCard(String imageUrl) {
+      return Container(
+        width: 54,
+        height: 54,
+        margin: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          image: DecorationImage(
+            image: AssetImage(imageUrl),
+          ),
+        ),
+      );
+    }
+
+    Widget content() {
+      return Expanded(
+        child: SingleChildScrollView(
+          child: Container(
+            margin: const EdgeInsets.only(top: 17),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              color: background1Color,
+            ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              margin: EdgeInsets.only(
+                top: defaultMargin,
+                left: defaultMargin,
+                right: defaultMargin,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          controller.product.value.name.toString(),
+                          style: primaryTextStyle.copyWith(
+                            fontSize: 18,
+                            fontWeight: semiBold,
+                          ),
+                        ),
+                        Text(
+                          controller.product.value.category!.name.toString(),
+                          style: secondaryTextStyle.copyWith(
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      wishlistController.setProduct(controller.product.value);
+                      if (wishlistController
+                          .isWishlist(controller.product.value)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: secondaryColor,
+                            content: const Text(
+                              'Produto adicionado aos favoritos',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: alertColor,
+                            content: const Text(
+                              'Produto removido dos favoritos',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: Obx(
+                      () => wishlistController
+                              .isWishlist(controller.product.value)
+                          ? Image.asset(
+                              'assets/icon_wishlist_full.png',
+                              width: 46,
+                            )
+                          : Image.asset(
+                              'assets/icon_wishlist.png',
+                              width: 46,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Price
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              margin: EdgeInsets.only(
+                top: 20,
+                left: defaultMargin,
+                right: defaultMargin,
+              ),
+              decoration: BoxDecoration(
+                color: background2Color,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Desde',
+                    style: primaryTextStyle,
+                  ),
+                  Text(
+                    '€${controller.product.value.price}',
+                    style: priceTextStyle.copyWith(
+                      fontSize: 16,
+                      fontWeight: semiBold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Descrição
+
+            Container(
+              width: double.infinity,
+              margin: EdgeInsets.only(
+                top: defaultMargin,
+                left: defaultMargin,
+                right: defaultMargin,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Descrição',
+                    style: primaryTextStyle.copyWith(fontWeight: bold),
+                  ),
+                  const SizedBox(
+                    height: 12,
+                  ),
+                  Text(
+                    '${controller.product.value.description}',
+                    style: secondaryTextStyle.copyWith(
+                      fontWeight: light,
+                    ),
+                    textAlign: TextAlign.justify,
+                  )
+                ],
+              ),
+            ),
+
+            // Produtos relacionados
+            Container(
+              width: double.infinity,
+              margin: EdgeInsets.only(
+                top: defaultMargin,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+                    child: Text(
+                      'Produtos relacionados',
+                      style: primaryTextStyle.copyWith(fontWeight: medium),
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 12,
+                  ),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: controller.familiarProducts.map((image) {
+                        controller.indexFamiliar++;
+                        return Container(
+                          margin: EdgeInsets.only(
+                              left: controller.indexFamiliar == 0
+                                  ? defaultMargin
+                                  : 0),
+                          child: familiarProductsCard(image),
+                        );
+                      }).toList(),
+                    ),
+                  )
+                ],
+              ),
+            ),
+
+            // Buttons
+
+            Container(
+              margin: EdgeInsets.all(defaultMargin),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => Get.toNamed(Routes.CHATPAGE,
+                        arguments: controller.product.value),
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: const BoxDecoration(
+                          image: DecorationImage(
+                        image: AssetImage('assets/button_chat.png'),
+                      )),
+                    ),
+                  ),
+                  const SizedBox(
+                    width: 16,
+                  ),
+                  Expanded(
+                    child: SizedBox(
+                      height: 54,
+                      child: TextButton(
+                        onPressed: () {
+                          cartController.addCart(controller.product.value);
+                          showSuccessDialog();
+                        },
+                        style: TextButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            backgroundColor: primaryColor),
+                        child: Text(
+                          'Adicionar ao carrinho',
+                          style: primaryTextStyle.copyWith(
+                            fontSize: 16,
+                            fontWeight: semiBold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            )
+          ],
+        ),
+          ),
+        ),
+      );
+    }
+
+    Widget header() {
+      return Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(
+              top: 40,
+              left: 20,
+              right: 20,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: () => Get.back(),
+                  icon: const Icon(Icons.chevron_left_outlined),
+                ),
+                IconButton(
+                  onPressed: () => Get.toNamed(Routes.CART),
+                  icon: Icon(
+                    Icons.shopping_bag,
+                    color: background1Color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          CarouselSlider(
+            items: controller.product.value.galleries!
+                .map((image) => Image.network(
+                      image.url!,
+                      //width: MediaQuery.of(context).size.width,
+                      //height: 310,
+                      //fit: BoxFit.cover,
+                    ))
+                .toList(),
+            options: CarouselOptions(
+              initialPage: 0,
+              enableInfiniteScroll: false,
+              onPageChanged: (index, reason) => controller.currentIndex(index),
+            ),
+          ),
+          const SizedBox(
+            height: 20,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: controller.images.map(
+              (e) {
+                controller.index++;
+                return indicator(controller.index);
+              },
+            ).toList(),
+          ),
+        ],
+      );
+    }
+
+
+
+      return Scaffold(
+      backgroundColor: background6Color,
+      body: Column(
+        children: [
+          header(),
+          Expanded(child: content()),
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\profile\controllers\profile.controller.dart
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/api/auth_services.dart';
+import 'package:handy/app/data/models/user_model.dart';
+import 'package:handy/app/routes/app_pages.dart';
+
+class ProfileController extends GetxController {
+  late UserModel user;
+  @override
+  void onInit() {
+    // TODO: implement onInit
+    super.onInit();
+    getDataUser();
+  }
+
+  logout() async {
+    final data = await AuthServices().logout();
+    if (data) {
+      Get.snackbar('Sucesso', 'Sessão terminada com sucesso');
+      Get.offAndToNamed(Routes.SIGN_IN);
+    } else {
+      Get.snackbar('Erro', 'Não foi possível terminar sessão');
+    }
+  }
+
+  getDataUser() {
+    final box = GetStorage();
+    final data = box.read('user');
+    user = UserModel();
+    user = UserModel.fromJson(data);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\profile\profile.screen.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import 'controllers/profile.controller.dart';
+
+class ProfileScreen extends GetView<ProfileController> {
+  ProfileScreen({Key? key}) : super(key: key);
+  @override
+  final controller = Get.put(ProfileController());
+  @override
+  Widget build(BuildContext context) {
+    Widget header() {
+      return AppBar(
+        backgroundColor: background1Color,
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        flexibleSpace: SafeArea(
+          child: Container(
+            padding: EdgeInsets.all(defaultMargin),
+            child: Row(
+              children: [
+                ClipOval(
+                  child: Image.network(
+                    controller.user.profilePhotoUrl.toString() ?? '',
+                    width: 64,
+                  ),
+                ),
+                const SizedBox(
+                  width: 16,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Olá ${controller.user.name}',
+                        style: primaryTextStyle.copyWith(
+                            fontSize: 24, fontWeight: semiBold),
+                      ),
+                      Text(
+                        '@${controller.user.username}',
+                        style: subtitleTextStyle.copyWith(
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => controller.logout(),
+                  child: Image.asset(
+                    'assets/icon_exit.png',
+                    width: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget menuItem(String text) {
+      return Container(
+        margin: const EdgeInsets.only(top: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              text,
+              style: secondaryTextStyle.copyWith(fontSize: 13),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: primaryTextColor,
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget content() {
+      return Expanded(
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: defaultMargin),
+          decoration: BoxDecoration(
+            color: background3Color,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(
+                height: 20,
+              ),
+              Text(
+                'Conta',
+                style: primaryTextStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: semiBold,
+                ),
+              ),
+              InkWell(
+                onTap: () => Get.toNamed(Routes.EDITPROFILE),
+                child: menuItem(
+                  'Editar Perfil',
+                ),
+              ),
+              InkWell(
+                onTap: () => Get.toNamed(Routes.HISTORIES),
+                child: menuItem('Os seus pedidos'),
+              ),
+              menuItem('Ajuda'),
+              const SizedBox(
+                height: 32,
+              ),
+              Text(
+                'Outras configurações',
+                style: primaryTextStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: semiBold,
+                ),
+              ),
+              menuItem('Política de privacidade'),
+              menuItem('Termos de utilização'),
+              menuItem('Acerca da aplicação'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        header(),
+        content(),
+      ],
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_in\bindings\sign_in_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/sign_in_controller.dart';
+
+class SignInBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SignInController>(
+      () => SignInController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_in\controllers\sign_in_controller.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/data/api/auth_services.dart';
+import 'package:handy/app/routes/app_pages.dart';
+
+class SignInController extends GetxController {
+  late TextEditingController emailC;
+  late TextEditingController passwordC;
+
+  RxBool isLoading = false.obs;
+
+  @override
+  void onInit() {
+    // TODO: implement onInit
+    super.onInit();
+    emailC = TextEditingController(text: '');
+    passwordC = TextEditingController(text: '');
+  }
+
+  @override
+  void onClose() {
+    // TODO: implement onClose
+    super.onClose();
+    emailC.dispose();
+    passwordC.dispose();
+  }
+
+  void login() async {
+    isLoading(true);
+    try {
+      final result = await AuthServices().login(
+        email: emailC.text,
+        password: passwordC.text,
+      );
+      final box = GetStorage();
+      print(box.read('user'));
+      if (result) {
+        Get.toNamed(Routes.MAIN);
+      } else {
+        Get.snackbar('Erro', 'Verifique os seus dados');
+      }
+      isLoading(false);
+    } catch (e) {
+      Get.snackbar('Erro', e.toString());
+    }
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_in\views\sign_in_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+import '../controllers/sign_in_controller.dart';
+
+class SignInView extends GetView<SignInController> {
+  const SignInView({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    Widget header() {
+      return Container(
+        margin: const EdgeInsets.only(top: 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Iniciar sessão',
+              style:
+                  secondaryTextStyle.copyWith(fontSize: 30, fontWeight: bold),
+            ),
+            const SizedBox(
+              height: 2,
+            ),
+            Text(
+              'Por favor inicie sessão na sua conta',
+              style: secondaryTextStyle.copyWith(fontSize: 15, fontWeight: medium),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget emailInput() {
+  return Container(
+    margin: const EdgeInsets.only(top: 70),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Endereço de e-mail',
+          style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+        ),
+        const SizedBox(
+          height: 12,
+        ),
+        Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: handybackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: primaryColor,  // Outline
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Row(
+              children: [
+                Image.asset(
+                  'assets/icon_email.png',
+                  width: 17,
+                ),
+                const SizedBox(
+                  width: 16,
+                ),
+                Expanded(
+                  child: TextFormField(
+                    controller: controller.emailC,
+                    style: blackTextStyle,
+                    decoration: InputDecoration.collapsed(
+                      hintText: 'O seu endereço de e-mail',
+                      hintStyle: secondaryTextStyle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget passwordInput() {
+  return Container(
+    margin: const EdgeInsets.only(top: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Palavra-passe',
+          style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+        ),
+        const SizedBox(
+          height: 12,
+        ),
+        Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: handybackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: primaryColor,  // Outline
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Row(
+              children: [
+                Image.asset(
+                  'assets/icon_password.png',
+                  width: 17,
+                ),
+                const SizedBox(
+                  width: 16,
+                ),
+                Expanded(
+                  child: TextFormField(
+                    controller: controller.passwordC,
+                    style: blackTextStyle,
+                    obscureText: true,
+                    decoration: InputDecoration.collapsed(
+                      hintText: 'A sua palavra-passe',
+                      hintStyle: secondaryTextStyle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+    Widget signInButton() {
+      return Container(
+        height: 50,
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 30),
+        child: TextButton(
+          onPressed: () => controller.login(),
+          style: TextButton.styleFrom(
+            backgroundColor: primaryColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Obx(
+            () => controller.isLoading.value == true
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: primaryTextColor,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 5,
+                      ),
+                      Text(
+                        'A carregar',
+                        style: primaryTextStyle.copyWith(
+                          fontSize: 16,
+                          fontWeight: medium,
+                        ),
+                      )
+                    ],
+                  )
+                : Text(
+                    'Iniciar sessão',
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 16,
+                      fontWeight: medium,
+                    ),
+                  ),
+          ),
+        ),
+      );
+    }
+
+    Widget footer() {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 30),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Ainda não tem conta? ',
+              style: subtitleTextStyle.copyWith(
+                fontSize: 18,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => Get.toNamed(Routes.SIGN_UP),
+              child: Text(
+                'Novo registo',
+                style: purpleTextStyle.copyWith(
+                  fontSize: 18,
+                  fontWeight: bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      backgroundColor: handybackground,
+      body: SafeArea(
+        child: Container(
+          margin: EdgeInsets.symmetric(
+            horizontal: defaultMargin,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header(),
+              emailInput(),
+              passwordInput(),
+              signInButton(),
+              const Spacer(),
+              footer(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_up\bindings\sign_up_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/sign_up_controller.dart';
+
+class SignUpBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SignUpController>(
+      () => SignUpController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_up\controllers\sign_up_controller.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/api/auth_services.dart';
+import 'package:handy/app/routes/app_pages.dart';
+
+class SignUpController extends GetxController {
+  late TextEditingController nameC;
+  late TextEditingController usernameC;
+  late TextEditingController emailC;
+  late TextEditingController passwordC;
+
+  RxBool isLoading = false.obs;
+
+  @override
+  void onInit() {
+    // TODO: implement onInit
+    super.onInit();
+    nameC = TextEditingController(text: '');
+    usernameC = TextEditingController(text: '');
+    emailC = TextEditingController(text: '');
+    passwordC = TextEditingController(text: '');
+  }
+
+  @override
+  void onClose() {
+    // TODO: implement onClose
+    super.onClose();
+    nameC.dispose();
+    usernameC.dispose();
+    emailC.dispose();
+    passwordC.dispose();
+  }
+
+  void register() async {
+    isLoading(true);
+    final result = await AuthServices().register(
+      name: nameC.text,
+      username: usernameC.text,
+      email: emailC.text,
+      password: passwordC.text,
+    );
+
+    if (result) {
+      Get.toNamed(Routes.MAIN);
+    } else {
+      Get.snackbar('Erro', 'Verifique os seus dados');
+    }
+    isLoading(false);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\sign_up\views\sign_up_view.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/shared/theme.dart';
+import '../controllers/sign_up_controller.dart';
+
+class SignUpView extends GetView<SignUpController> {
+  const SignUpView({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: handybackground,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: defaultMargin, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Criar nova conta',
+                  style: secondaryTextStyle.copyWith(fontSize: 30, fontWeight: bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Registe-se introduzindo os seus dados',
+                  style: secondaryTextStyle.copyWith(fontSize: 15, fontWeight: medium),
+                ),
+                const SizedBox(height: 30),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Primeiro e último nome',
+                      style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 50,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: handybackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          children: [
+                            Image.asset(
+                              'assets/icon_fullname.png',
+                              width: 17,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextFormField(
+                                controller: controller.nameC,
+                                style: blackTextStyle,
+                                decoration: InputDecoration.collapsed(
+                                  hintText: 'O seu nome',
+                                  hintStyle: secondaryTextStyle,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Nome de utilizador',
+                      style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 50,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: handybackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          children: [
+                            Image.asset(
+                              'assets/icon_username.png',
+                              width: 17,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextFormField(
+                                controller: controller.usernameC,
+                                style: blackTextStyle,
+                                decoration: InputDecoration.collapsed(
+                                  hintText: 'O seu nome de utilizador',
+                                  hintStyle: secondaryTextStyle,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Endereço de e-mail',
+                      style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 50,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: handybackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          children: [
+                            Image.asset(
+                              'assets/icon_email.png',
+                              width: 17,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextFormField(
+                                controller: controller.emailC,
+                                style: blackTextStyle,
+                                decoration: InputDecoration.collapsed(
+                                  hintText: 'O seu e-mail',
+                                  hintStyle: secondaryTextStyle,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Palavra-passe',
+                      style: purpleTextStyle.copyWith(fontSize: 16, fontWeight: bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 50,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: handybackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: primaryColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          children: [
+                            Image.asset(
+                              'assets/icon_password.png',
+                              width: 17,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextFormField(
+                                controller: controller.passwordC,
+                                style: blackTextStyle,
+                                obscureText: true,
+                                decoration: InputDecoration.collapsed(
+                                  hintText: 'Defina uma palavra-passe',
+                                  hintStyle: secondaryTextStyle,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  height: 50,
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => controller.register(),
+                    style: TextButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Obx(
+                      () => controller.isLoading.value == true
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: primaryTextColor,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'A carregar',
+                                  style: primaryTextStyle.copyWith(
+                                    fontSize: 16,
+                                    fontWeight: medium,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              'Criar nova conta',
+                              style: primaryTextStyle.copyWith(
+                                fontSize: 16,
+                                fontWeight: medium,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Já tem conta? ',
+                      style: secondaryTextStyle.copyWith(fontSize: 16),
+                    ),
+                    GestureDetector(
+                      onTap: () => Get.back(),
+                      child: Text(
+                        'Iniciar sessão',
+                        style: purpleTextStyle.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\splash_screen\bindings\splash_screen_binding.dart
+import 'package:get/get.dart';
+
+import '../controllers/splash_screen_controller.dart';
+
+class SplashScreenBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SplashScreenController>(
+      () => SplashScreenController(),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\splash_screen\controllers\splash_screen_controller.dart
+import 'dart:async';
+
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/app/routes/app_pages.dart';
+
+class SplashScreenController extends GetxController {
+  final box = GetStorage();
+  @override
+  void onInit() {
+    final user = box.read('user');
+    Timer(
+      const Duration(seconds: 3),
+      () => user != null
+          ? Get.offAllNamed(Routes.MAIN)
+          : Get.offAllNamed(Routes.SIGN_IN),
+    );
+    super.onInit();
+  }
+
+  @override
+  void onClose() {
+    dispose();
+    super.onClose();
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\splash_screen\views\splash_screen_view.dart
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+
+import '../controllers/splash_screen_controller.dart';
+
+class SplashScreenView extends GetView<SplashScreenController> {
+  SplashScreenView({Key? key}) : super(key: key);
+  @override
+  final controller = Get.put(SplashScreenController());
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFE6ECE5),
+      body: Center(
+        child: Container(
+          width: 260,
+          height: 300,
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/logo6.png'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\modules\wishlist\wishlist.screen.dart
+// ignore_for_file: invalid_use_of_protected_member
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/controllers/wishlist_controller.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+import 'package:handy/app/widgets/wishlist_card.dart';
+
+class WishlistScreen extends GetView<WishlistController> {
+  WishlistScreen({Key? key}) : super(key: key);
+  @override
+  final controller = Get.put(WishlistController());
+  @override
+  Widget build(BuildContext context) {
+    Widget header() {
+      return AppBar(
+        backgroundColor: background1Color,
+        centerTitle: true,
+        title: Text(
+          'Favoritos',
+          style: primaryTextStyle.copyWith(
+            fontSize: 18,
+            fontWeight: medium,
+          ),
+        ),
+        elevation: 0,
+        automaticallyImplyLeading: false,
+      );
+    }
+
+    Widget emptyWishlist() {
+      return Expanded(
+        child: Container(
+          width: double.infinity,
+          color: background3Color,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/icon_wishlist_info.png',
+                width: 80,
+              ),
+              const SizedBox(
+                height: 20,
+              ),
+              Text(
+                'Sem produtos favoritos',
+                style: primaryTextStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: medium,
+                ),
+              ),
+              const SizedBox(
+                height: 12,
+              ),
+              Text(
+                'Procure produtos e adicione-os aos favoritos',
+                style: subtitleTextStyle,
+              ),
+              const SizedBox(
+                height: 20,
+              ),
+              SizedBox(
+                height: 44,
+                child: TextButton(
+                  onPressed: () => Get.offAndToNamed(Routes.MAIN),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 10,
+                    ),
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        12,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    'Explorar loja',
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 16,
+                      fontWeight: medium,
+                    ),
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget content() {
+      return Expanded(
+        child: Container(
+          width: double.infinity,
+          color: background3Color,
+          child: Obx(
+            () => ListView(
+              padding: EdgeInsets.symmetric(
+                horizontal: defaultMargin,
+              ),
+              children: controller.wishList.value
+                  .map((product) => WishlistCard(product: product))
+                  .toList(),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        header(),
+        Obx(
+          () => controller.wishList.value.isEmpty ? emptyWishlist() : content(),
+        ),
+      ],
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\routes\app_pages.dart
+import 'package:get/get.dart';
+
+import '../modules/cart/bindings/cart_binding.dart';
+import '../modules/cart/views/cart_view.dart';
+import '../modules/chatpage/bindings/chatpage_binding.dart';
+import '../modules/chatpage/views/chatpage_view.dart';
+import '../modules/checkout/bindings/checkout_binding.dart';
+import '../modules/checkout/views/checkout_view.dart';
+import '../modules/checkout_success/bindings/checkout_success_binding.dart';
+import '../modules/checkout_success/views/checkout_success_view.dart';
+import '../modules/detail_histories/bindings/detail_histories_binding.dart';
+import '../modules/detail_histories/views/detail_histories_view.dart';
+import '../modules/editprofile/bindings/editprofile_binding.dart';
+import '../modules/editprofile/views/editprofile_view.dart';
+import '../modules/histories/bindings/histories_binding.dart';
+import '../modules/histories/views/histories_view.dart';
+import '../modules/main/bindings/main_binding.dart';
+import '../modules/main/views/main_view.dart';
+import '../modules/product/bindings/product_binding.dart';
+import '../modules/product/views/product_view.dart';
+import '../modules/sign_in/bindings/sign_in_binding.dart';
+import '../modules/sign_in/views/sign_in_view.dart';
+import '../modules/sign_up/bindings/sign_up_binding.dart';
+import '../modules/sign_up/views/sign_up_view.dart';
+import '../modules/splash_screen/bindings/splash_screen_binding.dart';
+import '../modules/splash_screen/views/splash_screen_view.dart';
+
+part 'app_routes.dart';
+
+class AppPages {
+  AppPages._();
+
+  static const INITIAL = Routes.SPLASH_SCREEN;
+
+  static final routes = [
+    GetPage(
+      name: _Paths.SPLASH_SCREEN,
+      page: () => SplashScreenView(),
+      binding: SplashScreenBinding(),
+    ),
+    GetPage(
+      name: _Paths.SIGN_IN,
+      page: () => const SignInView(),
+      binding: SignInBinding(),
+    ),
+    GetPage(
+      name: _Paths.SIGN_UP,
+      page: () => const SignUpView(),
+      binding: SignUpBinding(),
+    ),
+    GetPage(
+      name: _Paths.MAIN,
+      page: () => MainView(),
+      binding: MainBinding(),
+    ),
+    GetPage(
+      name: _Paths.CHATPAGE,
+      page: () => const ChatpageView(),
+      binding: ChatpageBinding(),
+    ),
+    GetPage(
+      name: _Paths.EDITPROFILE,
+      page: () => const EditprofileView(),
+      binding: EditprofileBinding(),
+    ),
+    GetPage(
+      name: _Paths.PRODUCT,
+      page: () => ProductView(),
+      binding: ProductBinding(),
+    ),
+    GetPage(
+      name: _Paths.CART,
+      page: () => const CartView(),
+      binding: CartBinding(),
+    ),
+    GetPage(
+      name: _Paths.CHECKOUT,
+      page: () => CheckoutView(),
+      binding: CheckoutBinding(),
+    ),
+    GetPage(
+      name: _Paths.CHECKOUT_SUCCESS,
+      page: () => const CheckoutSuccessView(),
+      binding: CheckoutSuccessBinding(),
+    ),
+    GetPage(
+      name: _Paths.HISTORIES,
+      page: () => const HistoriesView(),
+      binding: HistoriesBinding(),
+    ),
+    GetPage(
+      name: _Paths.DETAIL_HISTORIES,
+      page: () => const DetailHistoriesView(),
+      binding: DetailHistoriesBinding(),
+    ),
+  ];
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\routes\app_routes.dart
+part of 'app_pages.dart';
+// DO NOT EDIT. This is code generated via package:get_cli/get_cli.dart
+
+abstract class Routes {
+  Routes._();
+  static const SPLASH_SCREEN = _Paths.SPLASH_SCREEN;
+  static const SIGN_IN = _Paths.SIGN_IN;
+  static const SIGN_UP = _Paths.SIGN_UP;
+  static const MAIN = _Paths.MAIN;
+  static const CHATPAGE = _Paths.CHATPAGE;
+  static const EDITPROFILE = _Paths.EDITPROFILE;
+  static const PRODUCT = _Paths.PRODUCT;
+  static const CART = _Paths.CART;
+  static const CHECKOUT = _Paths.CHECKOUT;
+  static const CHECKOUT_SUCCESS = _Paths.CHECKOUT_SUCCESS;
+  static const HISTORIES = _Paths.HISTORIES;
+  static const DETAIL_HISTORIES = _Paths.DETAIL_HISTORIES;
+}
+
+abstract class _Paths {
+  _Paths._();
+  static const SPLASH_SCREEN = '/splash-screen';
+  static const SIGN_IN = '/sign-in';
+  static const SIGN_UP = '/sign-up';
+  static const MAIN = '/main';
+  static const CHATPAGE = '/chatpage';
+  static const EDITPROFILE = '/editprofile';
+  static const PRODUCT = '/product';
+  static const CART = '/cart';
+  static const CHECKOUT = '/checkout';
+  static const CHECKOUT_SUCCESS = '/checkout-success';
+  static const HISTORIES = '/histories';
+  static const DETAIL_HISTORIES = '/detail-histories';
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\shared\state.dart
+enum DataState { loading, done, error }
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\shared\theme.dart
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+double defaultMargin = 30.0;
+
+Color primaryColor = const Color(0xFF254A60);
+Color secondaryColor = const Color(0xffAAAAAA);
+Color alertColor = const Color(0xffED6363);
+Color priceColor = const Color(0xff2C96F1);
+Color blueColor = const Color(0xff38ABBE);
+Color background1Color = const Color(0xff1F1D2B);
+Color background2Color = const Color(0xff2B2937);
+Color background3Color = const Color(0xff242231);
+Color background4Color = const Color(0xff252836);
+Color background5Color = const Color(0xff2B2844);
+Color background6Color = const Color(0xffECEDEF);
+Color primaryTextColor = const Color(0xffF1F0F2);
+Color secondaryTextColor = const Color(0xff999999);
+Color subtitleColor = const Color(0xff504F5E);
+Color blackColor = const Color(0xff2E2E2E);
+Color handybackground = const Color(0xFFE6ECE5);
+Color transparanColor = Colors.transparent;
+
+
+TextStyle primaryTextStyle = GoogleFonts.poppins(
+  color: primaryTextColor,
+);
+TextStyle secondaryTextStyle = GoogleFonts.poppins(
+  color: secondaryTextColor,
+);
+TextStyle priceTextStyle = GoogleFonts.poppins(
+  color: priceColor,
+);
+TextStyle subtitleTextStyle = GoogleFonts.poppins(
+  color: subtitleColor,
+);
+
+TextStyle blackTextStyle = GoogleFonts.poppins(
+  color: blackColor,
+);
+
+TextStyle purpleTextStyle = GoogleFonts.poppins(
+  color: primaryColor,
+);
+
+TextStyle alertTextStyle = GoogleFonts.poppins(
+  color: alertColor,
+);
+
+FontWeight light = FontWeight.w300;
+FontWeight regular = FontWeight.w400;
+FontWeight medium = FontWeight.w500;
+FontWeight semiBold = FontWeight.w600;
+FontWeight bold = FontWeight.w700;
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\shared\values.dart
+String baseUrl = 'https://shamo-backend.buildwithangga.id/api';
+var headerContent = {'Content-Type': 'application/json'};
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\cart_card.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/cart_model.dart';
+import 'package:handy/app/modules/cart/controllers/cart_controller.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class CartCard extends StatelessWidget {
+  final CartModel cart;
+  CartCard({Key? key, required this.cart}) : super(key: key);
+
+  final cartController = Get.put(CartController());
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(
+        top: defaultMargin,
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      decoration: BoxDecoration(
+        color: background4Color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  image: DecorationImage(
+                    image: NetworkImage(
+                        cart.product!.galleries![0].url.toString()),
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 12,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cart.product!.name.toString(),
+                      style: primaryTextStyle.copyWith(
+                        fontWeight: semiBold,
+                      ),
+                    ),
+                    Text(
+                      '\$${cart.product!.price}',
+                      style: priceTextStyle,
+                    )
+                  ],
+                ),
+              ),
+              Column(
+                children: [
+                  InkWell(
+                    onTap: () {
+                      cartController.addQuantity(cart.id!);
+                    },
+                    child: Image.asset(
+                      'assets/icon_add.png',
+                      width: 16,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 2,
+                  ),
+                  Obx(
+                    () => Text(
+                      cart.quantity.value.toString(),
+                      style: primaryTextStyle.copyWith(fontWeight: medium),
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 2,
+                  ),
+                  InkWell(
+                    onTap: () {
+                      cartController.reduceQuantity(cart.id!);
+                    },
+                    child: Image.asset(
+                      'assets/icon_min.png',
+                      width: 16,
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(
+            height: 12,
+          ),
+          InkWell(
+            onTap: () {
+              cartController.removeCart(cart.id!);
+            },
+            child: Row(
+              children: [
+                Icon(
+                  Icons.delete,
+                  color: alertColor,
+                  size: 18,
+                ),
+                const SizedBox(
+                  width: 2,
+                ),
+                Text(
+                  'Remover',
+                  style: alertTextStyle.copyWith(
+                    fontSize: 12,
+                    fontWeight: light,
+                  ),
+                )
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\chat_bubble.dart
+import 'package:flutter/material.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class ChatBubble extends StatelessWidget {
+  final String text;
+  final bool isSender;
+  final ProductModel product;
+
+  const ChatBubble({
+    Key? key,
+    this.isSender = false,
+    this.text = '',
+    required this.product,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget productReview() {
+      return Container(
+        width: 230,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(isSender ? 12 : 0),
+            topRight: Radius.circular(isSender ? 0 : 12),
+            bottomLeft: const Radius.circular(12),
+            bottomRight: const Radius.circular(12),
+          ),
+          color: isSender ? background5Color : background4Color,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    product.galleries![0].url.toString(),
+                    width: 70,
+                  ),
+                ),
+                const SizedBox(
+                  width: 8,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        product.name.toString(),
+                        style: primaryTextStyle,
+                      ),
+                      const SizedBox(
+                        height: 4,
+                      ),
+                      Text(
+                        '€${product.price}',
+                        style: priceTextStyle.copyWith(fontWeight: medium),
+                      )
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(
+              height: 3,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 30),
+      child: Column(
+        crossAxisAlignment:
+            isSender ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          product is UnintializedProductModel ? const SizedBox() : productReview(),
+          Row(
+            mainAxisAlignment:
+                isSender ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.6,
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(isSender ? 12 : 0),
+                      topRight: Radius.circular(isSender ? 0 : 12),
+                      bottomLeft: const Radius.circular(12),
+                      bottomRight: const Radius.circular(12),
+                    ),
+                    color: isSender ? background5Color : background4Color,
+                  ),
+                  child: Text(
+                    text,
+                    style: primaryTextStyle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\chat_tile.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/message_model.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class ChatTile extends StatelessWidget {
+  final MessageModel message;
+
+  const ChatTile({Key? key, required this.message}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Get.toNamed(
+        Routes.CHATPAGE,
+        arguments: UnintializedProductModel(),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(top: 33),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: blueColor,
+                  radius: 30,
+                  child: Image.asset(
+                    'assets/img_logo.png',
+                    width: 35,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(
+                  width: 12,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Vendedor',
+                        style: primaryTextStyle.copyWith(fontSize: 15),
+                      ),
+                      Text(
+                        message.message!,
+                        style: secondaryTextStyle.copyWith(fontWeight: light),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'Agora',
+                  style: secondaryTextStyle.copyWith(fontSize: 10),
+                ),
+              ],
+            ),
+            const SizedBox(
+              height: 12,
+            ),
+            const Divider(
+              thickness: 1,
+              color: Color(0xff2B2939),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\checkout_card.dart
+import 'package:flutter/material.dart';
+import 'package:handy/app/data/models/cart_model.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class CheckoutCard extends StatelessWidget {
+  final CartModel cart;
+  const CheckoutCard({Key? key, required this.cart}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      decoration: BoxDecoration(
+        color: background4Color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              image: DecorationImage(
+                image: NetworkImage(cart.product!.galleries![0].url.toString()),
+              ),
+            ),
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  cart.product!.name.toString(),
+                  style: primaryTextStyle.copyWith(fontWeight: semiBold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(
+                  height: 2,
+                ),
+                Text(
+                  '€${cart.product!.price}',
+                  style: priceTextStyle,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          Text(
+            '${cart.quantity.value} produtos',
+            style: secondaryTextStyle.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\item_history_card.dart
+import 'package:flutter/material.dart';
+import 'package:handy/app/data/models/item_history_model.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class ItemHistoryCard extends StatelessWidget {
+  final ItemHistory item;
+  const ItemHistoryCard({Key? key, required this.item}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      decoration: BoxDecoration(
+        color: background4Color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 12,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.product!.name.toString(),
+                  style: primaryTextStyle.copyWith(fontWeight: semiBold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(
+                  height: 2,
+                ),
+                Text(
+                  '€${item.product!.price}',
+                  style: priceTextStyle,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          Text(
+            '${item.quantity} produtos',
+            style: secondaryTextStyle.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\product_card.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class ProductCard extends StatelessWidget {
+  final ProductModel product;
+
+  const ProductCard({Key? key, required this.product}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => Get.toNamed(Routes.PRODUCT, arguments: product),
+      child: Container(
+        width: 215,
+        height: 278,
+        margin: EdgeInsets.only(right: defaultMargin),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xffECEDEF),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(
+              height: 30,
+            ),
+            Image.network(
+              product.galleries![0].url.toString(),
+              width: 215,
+              height: 150,
+              fit: BoxFit.cover,
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /*Text(
+                    product.category!.name.toString(),
+                    style: secondaryTextStyle.copyWith(fontSize: 12),
+                  ),*/
+                  const SizedBox(
+                    height: 20,
+                  ),
+                  Text(
+                    product.name.toString(),
+                    style: blackTextStyle.copyWith(
+                      fontSize: 18,
+                      fontWeight: semiBold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  const SizedBox(
+                    height: 6,
+                  ),
+                  Text(
+                    'Desde €${product.price}',
+                    style: priceTextStyle.copyWith(
+                      fontSize: 14,
+                      fontWeight: medium,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\product_tile.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/routes/app_pages.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class ProductTile extends StatelessWidget {
+  final ProductModel product;
+  const ProductTile({Key? key, required this.product}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => Get.toNamed(Routes.PRODUCT, arguments: product),
+      child: Container(
+        margin: EdgeInsets.only(
+          left: defaultMargin,
+          right: defaultMargin,
+          bottom: defaultMargin,
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.network(
+                product.galleries![0].url.toString(),
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(
+              width: 12,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.category!.name.toString(),
+                    style: secondaryTextStyle.copyWith(fontSize: 12),
+                  ),
+                  const SizedBox(
+                    height: 6,
+                  ),
+                  Text(
+                    product.name.toString(),
+                    style: primaryTextStyle.copyWith(
+                      fontSize: 18,
+                      fontWeight: semiBold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  const SizedBox(
+                    height: 6,
+                  ),
+                  Text(
+                    'Desde €${product.price}',
+                    style: priceTextStyle.copyWith(
+                      fontSize: 14,
+                      fontWeight: medium,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\app\widgets\wishlist_card.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:handy/app/controllers/wishlist_controller.dart';
+import 'package:handy/app/data/models/product_model.dart';
+import 'package:handy/app/shared/theme.dart';
+
+class WishlistCard extends StatelessWidget {
+  final ProductModel product;
+  const WishlistCard({Key? key, required this.product}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.put(WishlistController());
+    return Container(
+      margin: const EdgeInsets.only(
+        top: 20,
+      ),
+      padding: const EdgeInsets.only(
+        top: 10,
+        left: 12,
+        bottom: 14,
+        right: 20,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: background4Color,
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              product.galleries![0].url.toString(),
+              width: 60,
+            ),
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name.toString(),
+                  style: primaryTextStyle.copyWith(fontWeight: semiBold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(
+                  height: 2,
+                ),
+                Text(
+                  '€${product.price}',
+                  style: priceTextStyle,
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => controller.setProduct(product),
+            child: Image.asset(
+              'assets/icon_wishlist_full.png',
+              width: 34,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\firebase_options.dart
+// File generated by FlutterFire CLI.
+// ignore_for_file: lines_longer_than_80_chars, avoid_classes_with_only_static_members
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// Default [FirebaseOptions] for use with your Firebase apps.
+///
+/// Example:
+/// ```dart
+/// import 'firebase_options.dart';
+/// // ...
+/// await Firebase.initializeApp(
+///   options: DefaultFirebaseOptions.currentPlatform,
+/// );
+/// ```
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      return web;
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return android;
+      case TargetPlatform.iOS:
+        return ios;
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDUwaNVfi4Nfim5FilXZfj0-vnOgBog-OE',
+    appId: '1:1090259177495:web:5432317c9d94af4cf24c52',
+    messagingSenderId: '1090259177495',
+    projectId: 'handy-dois',
+    authDomain: 'handy-dois.firebaseapp.com',
+    databaseURL: 'https://handy-dois-default-rtdb.europe-west1.firebasedatabase.app',
+    storageBucket: 'handy-dois.appspot.com',
+  );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyBmALBg9Dhla6piIk0E16joLacERIuJcXU',
+    appId: '1:1090259177495:android:25a93adc743a6e17f24c52',
+    messagingSenderId: '1090259177495',
+    projectId: 'handy-dois',
+    databaseURL: 'https://handy-dois-default-rtdb.europe-west1.firebasedatabase.app',
+    storageBucket: 'handy-dois.appspot.com',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDSMGcOcUwm7ArV2H-usZrEJ8slnyJ25PM',
+    appId: '1:1090259177495:ios:97394c35240b7557f24c52',
+    messagingSenderId: '1090259177495',
+    projectId: 'handy-dois',
+    databaseURL: 'https://handy-dois-default-rtdb.europe-west1.firebasedatabase.app',
+    storageBucket: 'handy-dois.appspot.com',
+    androidClientId: '1090259177495-pc5j6ld7a8o7n98v5frgm4gqgah251em.apps.googleusercontent.com',
+    iosClientId: '1090259177495-2r9r8gmmmn5ln0649lbpgrta1qj04u55.apps.googleusercontent.com',
+    iosBundleId: 'com.example.handy',
+  );
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\juntartudo.dart
+import 'dart:io';
+import 'package:path/path.dart' as path;
+
+void main() {
+  Directory projectDirectory = Directory('C:/src/flutter-ecommerce-main/lib');
+  File outputFile = File('C:/src/flutter-ecommerce-main/combined_code.txt');
+
+  List<File> dartFiles = _getDartFiles(projectDirectory);
+  _writeFilesToText(dartFiles, outputFile);
+
+  print('Code extraction completed!');
+}
+
+List<File> _getDartFiles(Directory directory) {
+  List<File> dartFiles = [];
+  directory.listSync(recursive: true).forEach((entity) {
+    if (entity is File && entity.path.endsWith('.dart')) {
+      dartFiles.add(entity);
+    }
+  });
+  return dartFiles;
+}
+
+void _writeFilesToText(List<File> files, File outputFile) {
+  for (File file in files) {
+    String filePath = file.path;
+    String fileContent = file.readAsStringSync();
+    outputFile.writeAsStringSync('Código do ficheiro: $filePath\n$fileContent\n\n',
+        mode: FileMode.append);
+  }
+}
+
+
+Código do ficheiro: C:/src/flutter-ecommerce-main/lib\main.dart
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:handy/firebase_options.dart';
+
+import 'app/routes/app_pages.dart';
+
+void main() async {
+  await GetStorage.init();
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(
+    GetMaterialApp(
+      title: "Application",
+      initialRoute: AppPages.INITIAL,
+      getPages: AppPages.routes,
+      debugShowCheckedModeBanner: false,
+    ),
+  );
+}
+
+
