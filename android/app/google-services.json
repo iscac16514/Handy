@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1090259177495",
+    "firebase_url": "https://handy-dois-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "handy-dois",
+    "storage_bucket": "handy-dois.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1090259177495:android:25a93adc743a6e17f24c52",
+        "android_client_info": {
+          "package_name": "com.example.handy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1090259177495-i5v18n6jnk33usoasbe3bp4shgnhgssp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmALBg9Dhla6piIk0E16joLacERIuJcXU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1090259177495-i5v18n6jnk33usoasbe3bp4shgnhgssp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1090259177495-2r9r8gmmmn5ln0649lbpgrta1qj04u55.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.handy"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
