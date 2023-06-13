@@ -1,17 +1,2 @@
 Handy é uma aplicação móvel criada no contexto da unidade curricular de Projecto e Desenvolvimento Informático, usando a tecnologia Flutter. O propósito desta aplicação é apoiar o comércio e os serviços locais, agindo como uma ponte entre consumidores e pequenos negócios locais de forma clara e eficiente.
-
-Funcionalidades
-Algumas das funcionalidades da aplicação incluem:
-Autenticação do utilizador: A aplicação disponibiliza um processo seguro e simples para registo e autenticação dos utilizadores.
-Mensagens: A aplicação permite a comunicação directa entre os utilizadores e os vendedores.
-Lista de favoritos: A aplicação permite aos utilizadores criar e gerir uma lista de produtos desejados.
-Carrinho de compras: A aplicação permite aos utilizadores adicionar produtos ao carrinho e finalizar a compra.
-Produtos: A aplicação tem um catálogo de produtos que os utilizadores podem visualizar e comprar.
-Categorias de produtos: A aplicação permite que os produtos sejam associados a categorias.
-Galeria de imagens do produto: A aplicação permite aos utilizadores visualizar várias imagens de um produto.
-
-Arquitectura
-A aplicação "Handy" é construída numa arquitectura modular, utilizando a linguagem Dart. Esta estrutura é composta por vários ficheiros .dart, cada um responsável por um conjunto específico de funcionalidades e componentes da aplicação.
-A aplicação usa o pacote GetX para gestão de estado e navegação. O GetX é uma biblioteca popular para o desenvolvimento de aplicações em Flutter, que fornece várias funcionalidades úteis, incluindo gestão de estado e navegação.
-A aplicação também usa o pacote 'GetStorage' para armazenamento persistente de dados. O armazenamento persistente é o processo de guardar dados no dispositivo do utilizador, para que possam ser acedidos mesmo após a aplicação ser fechada ou reiniciada.
-A aplicação também usa o Firebase Firestore para troca de mensagens entre compradores e vendedores. O Firebase Firestore é uma base de dados em nuvem que permite guardar e sincronizar dados em tempo real entre diferentes dispositivos.
+O presente repositório contém todos os ficheiros necessários para a execução da aplicação. Porém, foi carregado também um ficheiro 'handy-app-release-1.1.0.apk' que, mediante a sua instalação num dispositivo Android, permite a testagem da aplicação.
